@@ -382,14 +382,15 @@ if __name__ == '__main__':
         description='Scrape rp5.lv live data + predict max temp for Guarulhos')
     parser.add_argument('--raw-output', '-o', default='/tmp/sbgr_latest.csv',
                         help='Output for scraped raw CSV')
-    parser.add_argument('--daily-output', default='/tmp/weather_latest.csv',
+    parser.add_argument('--daily-output', default='data/daily_latest.csv',
                         help='Output for processed daily CSV')
-    parser.add_argument('--existing', default=None,
+    local = 'data/sbgr_raw.csv'
+    parser.add_argument('--existing', default=local if os.path.exists(local) else None,
                         help='Path to existing full raw rp5.lv CSV to merge with')
     parser.add_argument('--scrape-only', action='store_true',
                         help='Only scrape, skip prediction')
     parser.add_argument('--cutoff-hour', type=int, default=23,
-                        help='Use only data up to this hour for features (default: 23)')
+                        help='Use only data up to this hour for features (default: 23 = all)')
     args = parser.parse_args()
 
     print("Fetching rp5.lv archive page...")

@@ -44,14 +44,14 @@ brew install libomp
 ## Usage (one-command daily prediction)
 
 ```bash
-# Scrape latest data from rp5.lv → merge with local CSV → process → train → predict
-uv run python -m src.scrape_rp5 --existing data/sbgr_raw.csv
+# Predict with all available data (auto-detects data/sbgr_raw.csv)
+uv run python -m src.scrape_rp5
 
-# Predict using only data up to 09h (simulate early-morning prediction)
-uv run python -m src.scrape_rp5 --existing data/sbgr_raw.csv --cutoff-hour 9
+# Early-morning prediction (só dados até 09h)
+uv run python -m src.scrape_rp5 --cutoff-hour 9
 
-# Predict using only data up to 11h
-uv run python -m src.scrape_rp5 --existing data/sbgr_raw.csv --cutoff-hour 11
+# Predict usando dados até 11h
+uv run python -m src.scrape_rp5 --cutoff-hour 11
 ```
 
 This single command:
