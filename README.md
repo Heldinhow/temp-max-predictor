@@ -46,15 +46,21 @@ brew install libomp
 ```bash
 # Scrape latest data from rp5.lv → merge with local CSV → process → train → predict
 uv run python -m src.scrape_rp5 --existing data/sbgr_raw.csv
+
+# Predict using only data up to 09h (simulate early-morning prediction)
+uv run python -m src.scrape_rp5 --existing data/sbgr_raw.csv --cutoff-hour 9
+
+# Predict using only data up to 11h
+uv run python -m src.scrape_rp5 --existing data/sbgr_raw.csv --cutoff-hour 11
 ```
 
 This single command:
 1. Fetches the last ~27 hourly observations from rp5.lv
-2. Merges them into `data/sbgr_raw.csv` (deduplicating by timestamp)
-3. Processes raw data to daily format with morning features (≤11h)
+2. Merges them into `data/sbgr_raw.csv` (deduplicating by timestamp, file updated in-place)
+3. Processes raw data to daily format using only observations ≤ `cutoff-hour` for features
 4. Trains LightGBM on the full history (cutoff: 2024-01-01)
 5. Computes optimal ensemble weight from validation
-6. Predicts today's max temperature with Polymarket probabilities
+6. Predicts today's max temperature
 
 ### Train with hyperparameter search
 

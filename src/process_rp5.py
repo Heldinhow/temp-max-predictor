@@ -98,8 +98,13 @@ def parse_cloud_cover(cc_str: str) -> float:
     return np.nan
 
 
-def process_to_daily(df_raw: pd.DataFrame) -> pd.DataFrame:
-    """Aggregate hourly rp5 data into daily records."""
+def process_to_daily(df_raw: pd.DataFrame, cutoff_hour: int = 23) -> pd.DataFrame:
+    """Aggregate hourly rp5 data into daily records.
+
+    Args:
+        cutoff_hour: Only use observations <= this hour for morning features.
+                     Target (temp_max_real) always uses ALL available hours.
+    """
     df = df_raw.copy()
     df['datetime'] = df['Hora local em Guarulhos (aeroporto)'].apply(parse_datetime)
     df = df.dropna(subset=['datetime'])
@@ -121,8 +126,9 @@ def process_to_daily(df_raw: pd.DataFrame) -> pd.DataFrame:
     else:
         df['cloud_cover'] = np.nan
 
-    # === Build daily records directly via groupby ===
-    morning = df[(df['hour'] >= 3) & (df['hour'] <= 12)].copy()
+    # Feature data: only up to cutoff_hour (simulates morning-only prediction)
+    df_feat = df[df['hour'] <= cutoff_hour].copy()
+    morning = df_feat[(df_feat['hour'] >= 3) & (df_feat['hour'] <= min(12, cutoff_hour))].copy()
 
     # === Daily target (max temp from all hours) ===
     day_target = df.groupby('date')['T'].max().reset_index()
@@ -215,6 +221,8 @@ def main():
     parser = argparse.ArgumentParser(description='Process raw rp5.lv CSV to daily format')
     parser.add_argument('input', type=str, help='Path to raw rp5.lv CSV file')
     parser.add_argument('--output', '-o', type=str, default=None, help='Output CSV path')
+    parser.add_argument('--cutoff-hour', type=int, default=23,
+                        help='Only use observations up to this hour for features (default: 23)')
     args = parser.parse_args()
 
     input_path = Path(args.input)
@@ -225,8 +233,8 @@ def main():
     print(f"Raw rows: {len(df_raw)}")
     print(f"Columns: {df_raw.columns.tolist()}")
 
-    print("\nProcessing to daily (may take ~1 min)...")
-    df_daily = process_to_daily(df_raw)
+    print(f"\nProcessing to daily (cutoff_hour={args.cutoff_hour})...")
+    df_daily = process_to_daily(df_raw, cutoff_hour=args.cutoff_hour)
     print(f"Daily rows: {len(df_daily)}")
     print(f"Date range: {df_daily['date'].min()} → {df_daily['date'].max()}")
 

@@ -360,7 +360,7 @@ def merge_with_existing(scraped_csv: str, existing_csv: str) -> str:
 
 
 def process_and_predict(raw_csv: str, daily_csv: str = 'data/daily_latest.csv',
-                        existing_raw: str | None = None):
+                        existing_raw: str | None = None, cutoff_hour: int = 23):
     from src.process_rp5 import parse_rp5_csv, process_to_daily
 
     if existing_raw:
@@ -369,9 +369,10 @@ def process_and_predict(raw_csv: str, daily_csv: str = 'data/daily_latest.csv',
         csv_path = raw_csv
 
     df = parse_rp5_csv(csv_path)
-    daily = process_to_daily(df)
+    daily = process_to_daily(df, cutoff_hour=cutoff_hour)
     daily.to_csv(daily_csv, index=False)
-    print(f"Daily: {len(daily)} days, {daily['date'].min()} → {daily['date'].max()}")
+    print(f"Daily: {len(daily)} days, {daily['date'].min()} → {daily['date'].max()}, "
+          f"cutoff_hour={cutoff_hour}")
     return run_prediction(daily_csv)
 
 
@@ -387,6 +388,8 @@ if __name__ == '__main__':
                         help='Path to existing full raw rp5.lv CSV to merge with')
     parser.add_argument('--scrape-only', action='store_true',
                         help='Only scrape, skip prediction')
+    parser.add_argument('--cutoff-hour', type=int, default=23,
+                        help='Use only data up to this hour for features (default: 23)')
     args = parser.parse_args()
 
     print("Fetching rp5.lv archive page...")
@@ -399,4 +402,5 @@ if __name__ == '__main__':
     if args.scrape_only:
         sys.exit(0)
 
-    result = process_and_predict(args.raw_output, args.daily_output, args.existing)
+    result = process_and_predict(args.raw_output, args.daily_output,
+                                 args.existing, args.cutoff_hour)
