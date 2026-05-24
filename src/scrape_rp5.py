@@ -323,6 +323,10 @@ def run_prediction(daily_csv: str):
               'temp_morning_mean', 'wind_speed', 'cloud_cover']:
         if f in today_row and pd.notna(today_row[f]):
             print(f"    {f}: {today_row[f]:.1f}")
+    lh = today_row.get('latest_hour', None)
+    lt = today_row.get('latest_temp', None)
+    if pd.notna(lh):
+        print(f"\n  Última obs: {int(lh):02d}h — {lt:.1f}°C")
     print(f"\n  LightGBM:     {lgb_pred:.1f}°C")
     print(f"  Analog Days:  {analog_pred['prediction']:.1f}°C")
     print(f"  ───────────────────────")

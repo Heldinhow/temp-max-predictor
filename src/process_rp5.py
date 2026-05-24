@@ -172,9 +172,12 @@ def process_to_daily(df_raw: pd.DataFrame, cutoff_hour: int = 23) -> pd.DataFram
     t09_df = t09_df.groupby('date')['T'].first().reset_index()
     t09_df.columns = ['date', 'temp_09h']
 
+    # === Latest observation hour & temp for each day (from cutoff-filtered data) ===
+    latest = df_feat.sort_values('hour').groupby('date').agg(latest_hour=('hour', 'last'), latest_temp=('T', 'last')).reset_index()
+
     # === Merge all ===
     daily = day_target.copy()
-    for frame in [day_min, day_mean, t06_df, t09_df, u06_df, p06_df, morn_agg]:
+    for frame in [day_min, day_mean, t06_df, t09_df, u06_df, p06_df, morn_agg, latest]:
         daily = daily.merge(frame, on='date', how='left')
 
     # Add temp_range
@@ -209,7 +212,8 @@ def process_to_daily(df_raw: pd.DataFrame, cutoff_hour: int = 23) -> pd.DataFram
         'humidity_morning_mean', 'pressure_morning_mean',
         'wind_speed', 'wind_gust_max', 'wind_dir',
         'cloud_cover', 'visibility',
-        'temp_max_real', 'temp_min_real', 'temp_mean_real', 'temp_range'
+        'temp_max_real', 'temp_min_real', 'temp_mean_real', 'temp_range',
+        'latest_hour', 'latest_temp',
     ]
     final_cols = [c for c in keep_cols if c in daily.columns]
     daily = daily[final_cols]
