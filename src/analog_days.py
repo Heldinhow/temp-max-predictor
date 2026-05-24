@@ -10,17 +10,7 @@ from sklearn.neighbors import NearestNeighbors
 
 
 class AnalogDaysFinder:
-    """
-    Find historical days with similar initial conditions (morning temperature,
-    humidity, pressure, etc.) and use their outcomes to predict today's max temp.
-    """
-
     def __init__(self, n_neighbors: int = 20, month_window: int = 1):
-        """
-        Args:
-            n_neighbors: Number of analog days to consider
-            month_window: How many months around current month to search
-        """
         self.n_neighbors = n_neighbors
         self.month_window = month_window
         self.scaler = StandardScaler()
@@ -28,30 +18,13 @@ class AnalogDaysFinder:
         self.features = None
 
     def fit(self, df: pd.DataFrame, features: list):
-        """
-        Fit the analog finder on historical data.
-
-        Args:
-            df: DataFrame with historical weather data
-            features: List of feature column names
-        """
         self.df = df.copy()
         self.features = features
-
-        # Fit scaler on all data
-        self.scaler.fit(df[features])
+        # Fill NaN for scaling
+        df_feat = df[features].fillna(df[features].median())
+        self.scaler.fit(df_feat)
 
     def find_analogs(self, current_conditions: dict, top_k: int = None) -> pd.DataFrame:
-        """
-        Find analog days for current conditions.
-
-        Args:
-            current_conditions: Dict with feature values (e.g., {'temp_06h': 18.5, ...})
-            top_k: If set, return only top K most similar days
-
-        Returns:
-            DataFrame of analog days sorted by similarity
-        """
         if self.df is None:
             raise ValueError("Model not fitted. Call fit() first.")
 
@@ -65,29 +38,24 @@ class AnalogDaysFinder:
         else:
             filtered_df = self.df[(self.df['mes'] >= month_min) | (self.df['mes'] <= month_max)]
 
-        if len(filtered_df) == 0:
-            filtered_df = self.df  # Fall back to all data
+        if len(filtered_df) < self.n_neighbors:
+            filtered_df = self.df
 
-        # Build current feature vector
-        current_vec = np.array([[current_conditions.get(f, 0) for f in self.features]])
+        # Build feature vector
+        feat_vec = np.array([[current_conditions.get(f, 0) for f in self.features]])
+        feat_vec = np.nan_to_num(feat_vec, nan=0)
 
-        # Scale
-        current_scaled = self.scaler.transform(current_vec)
-        historical_scaled = self.scaler.transform(filtered_df[self.features])
+        scaled_current = self.scaler.transform(feat_vec)
+        scaled_hist = self.scaler.transform(filtered_df[self.features].fillna(0))
 
-        # Find nearest neighbors using distance weighting
-        nn = NearestNeighbors(n_neighbors=min(self.n_neighbors, len(filtered_df)), 
-                               weights='distance')
-        nn.fit(historical_scaled)
+        k = min(self.n_neighbors, len(filtered_df))
+        nn_model = NearestNeighbors(n_neighbors=k, metric='euclidean')
+        nn_model.fit(scaled_hist)
+        distances, indices = nn_model.kneighbors(scaled_current)
 
-        distances, indices = nn.kneighbors(current_scaled)
-
-        # Get analog days
         analog_days = filtered_df.iloc[indices[0]].copy()
         analog_days['distance'] = distances[0]
-        analog_days['weight'] = 1 / (distances[0] + 1e-6)  # Avoid division by zero
-
-        # Sort by weight (most similar first)
+        analog_days['weight'] = 1 / (distances[0] + 1e-6)
         analog_days = analog_days.sort_values('weight', ascending=False)
 
         if top_k:
@@ -96,29 +64,17 @@ class AnalogDaysFinder:
         return analog_days
 
     def predict_max_temp(self, current_conditions: dict, target_col: str = 'temp_max_real') -> dict:
-        """
-        Predict max temperature using weighted average of analog days.
-
-        Args:
-            current_conditions: Dict with current feature values
-            target_col: Target column name in historical data
-
-        Returns:
-            Dict with prediction and statistics
-        """
         analogs = self.find_analogs(current_conditions, top_k=self.n_neighbors)
 
         if target_col not in analogs.columns:
             raise ValueError(f"Target column '{target_col}' not found in data")
 
-        # Weighted average
         weights = analogs['weight'].values
         temps = analogs[target_col].values
 
         weighted_avg = np.sum(weights * temps) / np.sum(weights)
 
-        # Also calculate simple statistics
-        result = {
+        return {
             'prediction': round(weighted_avg, 1),
             'mean': round(analogs[target_col].mean(), 1),
             'std': round(analogs[target_col].std(), 1),
@@ -127,5 +83,3 @@ class AnalogDaysFinder:
             'n_analogs': len(analogs),
             'analog_days': analogs[['date', target_col, 'distance', 'weight']].to_dict('records')
         }
-
-        return result
