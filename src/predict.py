@@ -98,6 +98,16 @@ def predict_today(
 
     ensemble = lgb_weight * lgb_pred + analog_weight * analog_pred['prediction']
 
+    observed_max = max(
+        float(today_row['temp_06h'].values[0]) if 'temp_06h' in today_row else -999,
+        float(today_row['temp_09h'].values[0]) if 'temp_09h' in today_row else -999,
+        float(today_row['temp_morning_mean'].values[0]) if 'temp_morning_mean' in today_row else -999,
+    )
+    if observed_max > 0 and ensemble < observed_max:
+        print(f"  ⚠ Previsão corrigida: {ensemble:.1f}°C → {observed_max:.1f}°C "
+              f"(mínimo = máxima já observada hoje)")
+        ensemble = round(observed_max, 1)
+
     print(f"\n{'='*50}")
     print(f"  Previsão para {today}")
     print(f"{'='*50}")

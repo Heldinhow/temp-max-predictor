@@ -304,6 +304,16 @@ def run_prediction(daily_csv: str):
     ensemble = best_w * lgb_pred + (1 - best_w) * analog_pred['prediction']
     actual = float(today_row[target]) if pd.notna(today_row[target]) else None
 
+    observed_max = max(
+        float(today_row.get('temp_06h', -999)),
+        float(today_row.get('temp_09h', -999)),
+        float(today_row.get('temp_morning_mean', -999)),
+    )
+    if observed_max > 0 and ensemble < observed_max:
+        print(f"  ⚠ Previsão corrigida: {ensemble:.1f}°C → {observed_max:.1f}°C "
+              f"(mínimo = máxima já observada hoje)")
+        ensemble = round(observed_max, 1)
+
     print(f"\n{'='*55}")
     print(f"  PREVISÃO PARA {TODAY}")
     print(f"{'='*55}")
