@@ -76,7 +76,13 @@ def parse_wind_dir(dd_str: str) -> float:
 def parse_cloud_cover(cc_str: str) -> float:
     if not cc_str or not isinstance(cc_str, str):
         return np.nan
-    cc_lower = cc_str.lower()
+    cc_lower = cc_str.lower().strip()
+    try:
+        val = float(cc_lower)
+        if 0 <= val <= 8:
+            return val
+    except ValueError:
+        pass
     if '%' in cc_lower:
         match = re.search(r'(\d+)%', cc_lower)
         if match:

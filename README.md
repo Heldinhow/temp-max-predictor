@@ -1,82 +1,114 @@
 # temp-max-predictor
 
-LightGBM model to predict daily maximum temperature using analog days methodology.
-
-Built for trading weather prediction markets on Polymarket (São Paulo / GRU airport).
+LightGBM model to predict daily maximum temperature for Guarulhos (SBGR) using analog days methodology. Built for trading weather prediction markets on Polymarket.
 
 ## Approach
 
-1. **Analog Days** - Find historical days with similar morning conditions (temp, humidity, pressure) and use their outcomes
-2. **LightGBM** - Gradient boosting on tabular features
-3. **Ensemble** - Weighted combination of both approaches
+1. **LightGBM** — Gradient boosting on 23 features (morning observations, lags, cyclical date)
+2. **Analog Days** — NearestNeighbors search for historical days with similar morning conditions
+3. **Ensemble** — Adaptive weight (learned from validation set, typically 100% LGB)
 
 ## Project Structure
 
 ```
 temp-max-predictor/
 ├── src/
-│   ├── data_loader.py   # Load and prepare CSV data
-│   ├── features.py      # Feature engineering
-│   ├── analog_days.py   # Analog days finder
-│   ├── model.py         # LightGBM model class
-│   ├── train.py         # Training script
-│   ├── predict.py       # Prediction script
-│   └── evaluate.py      # Evaluation script
+│   ├── scrape_rp5.py    # Live data scraper from rp5.lv
+│   ├── process_rp5.py   # Raw rp5.lv CSV → daily format
+│   ├── data_loader.py   # Load, prepare features, lag features
+│   ├── analog_days.py   # Analog days finder (NearestNeighbors)
+│   ├── model.py         # LightGBM model wrapper
+│   ├── train.py         # Training + hyperparameter search
+│   ├── predict.py       # Prediction with adaptive ensemble weight
+│   └── evaluate.py      # Evaluation
 ├── data/
-│   └── .gitkeep
-├── notebooks/
-│   └── eda.ipynb        # Exploratory data analysis
+│   ├── daily_at11.csv   # Processed daily data (≤11h observations)
+│   └── sbgr_raw.csv     # Local copy of full rp5.lv export
 ├── models/              # Trained models (gitignored)
-├── requirements.txt
-├── .gitignore
 └── README.md
 ```
 
 ## Setup
 
 ```bash
-pip install -r requirements.txt
+uv venv
+source .venv/bin/activate
+uv pip install -r requirements.txt
 ```
 
-## Usage
+On macOS, LightGBM requires OpenMP:
+```bash
+brew install libomp
+```
 
-### 1. Train the model
+## Usage (one-command daily prediction)
 
 ```bash
-python -m src.train --data data/weather.csv --cutoff 2024-01-01
+# Scrape latest data from rp5.lv → merge with local CSV → process → train → predict
+uv run python -m src.scrape_rp5 --existing data/sbgr_raw.csv
 ```
 
-### 2. Evaluate
+This single command:
+1. Fetches the last ~27 hourly observations from rp5.lv
+2. Merges them into `data/sbgr_raw.csv` (deduplicating by timestamp)
+3. Processes raw data to daily format with morning features (≤11h)
+4. Trains LightGBM on the full history (cutoff: 2024-01-01)
+5. Computes optimal ensemble weight from validation
+6. Predicts today's max temperature with Polymarket probabilities
+
+### Train with hyperparameter search
 
 ```bash
-python -m src.evaluate --data data/weather.csv --cutoff 2024-01-01
+uv run python -m src.train --data data/daily_at11.csv --tune
 ```
 
-### 3. Predict today
+### Data format
 
-```bash
-python -m src.predict --data data/today.csv
+Input is the raw semicolon-separated CSV exported from [rp5.lv](https://rp5.lv) for SBGR (METAR). The pipeline handles:
+- Parse raw export → clean hourly observations
+- Aggregate to daily: morning stats (3h–12h), 06h values, lag features
+- Target: `temp_max_real` (max temperature from all hours)
+
+### Features (23 total)
+
+| Type | Features |
+|------|----------|
+| Morning (06h) | temp_06h, humidity_06h, pressure_06h |
+| Morning stats | temp_morning_mean/std/min, humidity/pressure mean |
+| Wind | wind_speed, wind_gust_max, wind_dir |
+| Sky | cloud_cover, visibility |
+| Lags | temp_max_yesterday, temp_range_yesterday, temp_mean_yesterday |
+| Rolling | temp_max_3day_avg, temp_range_3day_avg |
+| Cyclical | mes_sin/cos, dia_do_ano_sin/cos |
+
+## Model Performance
+
+| Metric | Value |
+|--------|-------|
+| Validation MAE | ~1.29°C |
+| Validation RMSE | ~1.66°C |
+| Ensemble weight | Adaptive (typically 100% LGB) |
+
+## Prediction Output
+
 ```
+=======================================================
+  PREVISÃO PARA 2026-05-23
+=======================================================
+  Peso adaptativo: LGB=100% / Analog=0%
 
-## Data Format
+  Condições matinais:
+    temp_06h: 16.0
+    temp_09h: 16.0
+    humidity_06h: 94.0
+    pressure_06h: 768.1
+    temp_morning_mean: 16.3
+    wind_speed: 2.7
+    cloud_cover: 7.6
 
-CSV should contain at minimum:
-
-| Column | Description |
-|--------|-------------|
-| date | Date (YYYY-MM-DD) |
-| temp_06h | Temperature at 06:00 (or earliest morning observation) |
-| humidity_06h | Humidity at 06:00 |
-| pressure_06h | Pressure at 06:00 |
-| temp_max_real | Actual maximum temperature (target) |
-
-Optional:
-- wind_speed, wind_dir
-- cloud_cover, visibility
-
-## Output
-
-Predictions include:
-- Point estimate (°C)
-- Probability for each threshold relevant to Polymarket (≥20°C, ≥21°C, etc.)
-- Confidence based on analog days spread
+  LightGBM:     17.7°C
+  Analog Days:  20.2°C
+  ───────────────────────
+  ENSEMBLE:     17.7°C
+  Real max:     18.0°C (erro: -0.3°C)
+```

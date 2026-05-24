@@ -9,8 +9,8 @@ import pandas as pd
 import numpy as np
 from sklearn.metrics import mean_absolute_error, mean_squared_error
 
-from data_loader import load_weather_data, prepare_features, get_feature_columns, split_temporal
-from model import TempPredictor
+from src.data_loader import load_weather_data, prepare_features, get_feature_columns, split_temporal
+from src.model import TempPredictor
 
 
 def evaluate(data_path: str, cutoff: str = '2024-01-01'):
